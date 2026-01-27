@@ -1,6 +1,10 @@
 import { auth } from './firebase';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+if (!API_BASE_URL) {
+    console.error('VITE_API_URL is not defined. Please set it in your environment variables.');
+}
+
 
 export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
     if (!auth) {
@@ -25,8 +29,15 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'API request failed');
+        let errorMessage = 'API request failed';
+        try {
+            const error = await response.json();
+            errorMessage = error.message || errorMessage;
+        } catch {
+            // If response is not JSON, use status text
+            errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
     }
 
     return response.json();
