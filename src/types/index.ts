@@ -20,6 +20,7 @@ export interface Review {
   language: Language;
   context: Context;
   code: string;
+  originalCode: string;
   issues: Issue[];
   severityScore: number;
   createdAt: string;
