@@ -14,7 +14,7 @@ export const analyzeCode = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ message: 'Code is required' });
         }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
         const prompt = `
       Analyze the following ${language} code for a ${context} context.

@@ -6,7 +6,15 @@ dotenv.config();
 let firebaseConfig;
 
 try {
-    firebaseConfig = process.env.FIREBASE_CONFIG ? JSON.parse(process.env.FIREBASE_CONFIG) : null;
+    const configString = process.env.FIREBASE_CONFIG;
+    if (configString) {
+        firebaseConfig = JSON.parse(configString);
+        if (firebaseConfig.private_key) {
+            firebaseConfig.private_key = firebaseConfig.private_key.replace(/\\n/g, '\n').replace(/\\n/g, '\n');
+        }
+    } else {
+        firebaseConfig = null;
+    }
 } catch (error) {
     console.error('Error parsing FIREBASE_CONFIG:', error);
     firebaseConfig = null;
