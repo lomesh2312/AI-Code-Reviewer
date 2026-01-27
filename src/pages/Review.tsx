@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import { AlertCircle, CheckCircle, Info, AlertTriangle, Code2, Sparkles, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, Info, AlertTriangle, Code2, Sparkles, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { Language, Context, Issue, Severity, Category } from '../types';
 import { apiRequest } from '../api';
 
@@ -12,12 +12,35 @@ const sampleCode = `function fetchUserData(userId) {
 
 export default function Review() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [code, setCode] = useState(sampleCode);
   const [language, setLanguage] = useState<Language>('TypeScript');
   const [context, setContext] = useState<Context>('Frontend');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set());
+  const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (id) {
+      const fetchReview = async () => {
+        setIsAnalyzing(true);
+        try {
+          const data = await apiRequest(`/reviews/${id}`);
+          setCode(data.originalCode);
+          setLanguage(data.language);
+          setContext(data.context);
+          setIssues(data.issues);
+          setCurrentReviewId(data.id);
+        } catch (error) {
+          console.error('Failed to fetch review:', error);
+        } finally {
+          setIsAnalyzing(false);
+        }
+      };
+      fetchReview();
+    }
+  }, [id]);
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
@@ -31,9 +54,10 @@ export default function Review() {
         }),
       });
       setIssues(data.issues);
+      setCurrentReviewId(data.id);
+      navigate(`/review/${data.id}`, { replace: true });
     } catch (error) {
       console.error('Analysis failed:', error);
-      // You might want to show an error notification here
     } finally {
       setIsAnalyzing(false);
     }
@@ -139,9 +163,13 @@ export default function Review() {
                   lineNumbers: 'on',
                   scrollBeyondLastLine: false,
                   automaticLayout: true,
+                  contextmenu: true,
+                  wordWrap: 'on',
+                  padding: { top: 10, bottom: 10 },
                 }}
               />
             </div>
+
 
             <button
               onClick={handleAnalyze}
@@ -167,9 +195,9 @@ export default function Review() {
           <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-white">AI Feedback</h2>
-              {issues.length > 0 && (
+              {!!currentReviewId && issues.length > 0 && (
                 <button
-                  onClick={() => navigate('/diff/new')}
+                  onClick={() => navigate(`/diff/${currentReviewId}`)}
                   className="text-blue-400 hover:text-blue-300 text-sm font-medium flex items-center space-x-1"
                 >
                   <span>View Refactored</span>

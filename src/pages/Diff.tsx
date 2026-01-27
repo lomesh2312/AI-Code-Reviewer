@@ -1,48 +1,76 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { Check, X, ArrowLeft, Download, Copy, CheckCircle } from 'lucide-react';
-
-const originalCode = `function fetchUserData(userId) {
-  const data = fetch('/api/users/' + userId).then(r => r.json());
-  return data;
-}`;
-
-const refactoredCode = `async function fetchUserData(userId: string): Promise<User> {
-  try {
-    const response = await fetch(\`/api/users/\${userId}\`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch user');
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching user:', error);
-    throw error;
-  }
-}`;
+import { apiRequest } from '../api';
+import { Review } from '../types';
 
 export default function Diff() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const [review, setReview] = useState<Review | null>(null);
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    if (id) {
+      const fetchReview = async () => {
+        try {
+          const data = await apiRequest(`/reviews/${id}`);
+          setReview(data);
+        } catch (error) {
+          console.error('Failed to fetch review:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchReview();
+    }
+  }, [id]);
+
+  const refactoredCode = useMemo(() => {
+    if (!review) return '';
+    // If we have a stored refactoredCode, use it. 
+    // Otherwise, try to construct it or just show the last issue's example
+    if (review.refactoredCode) return review.refactoredCode;
+
+    const lastIssueWithFix = [...review.issues].reverse().find(i => i.refactoredExample);
+    return lastIssueWithFix?.refactoredExample || review.code;
+  }, [review]);
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(refactoredCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (refactoredCode) {
+      navigator.clipboard.writeText(refactoredCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleAccept = () => {
     navigate('/dashboard');
   };
 
-  const improvements = [
-    'Added explicit TypeScript type annotations',
-    'Converted to async/await for better readability',
-    'Added comprehensive error handling',
-    'Used template literals for string interpolation',
-    'Added response status check',
-    'Improved code structure and maintainability',
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!review) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-bold text-white mb-4">Review not found</h2>
+        <button
+          onClick={() => navigate('/history')}
+          className="text-blue-400 hover:text-blue-300"
+        >
+          Back to History
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -56,7 +84,7 @@ export default function Diff() {
           </button>
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">Code Comparison</h1>
-            <p className="text-gray-400">Review the suggested changes</p>
+            <p className="text-gray-400">Review the suggested changes for {review.language}</p>
           </div>
         </div>
 
@@ -89,13 +117,13 @@ export default function Diff() {
           <div className="lg:col-span-2">
             <h2 className="text-xl font-bold text-white mb-4">Changes Overview</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {improvements.map((improvement, index) => (
+              {review.issues.map((issue, index) => (
                 <div
                   key={index}
                   className="flex items-start space-x-2 bg-gray-900/50 border border-gray-700 rounded-lg p-3"
                 >
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-gray-300">{improvement}</span>
+                  <span className="text-sm text-gray-300">{issue.title}</span>
                 </div>
               ))}
             </div>
@@ -103,15 +131,13 @@ export default function Diff() {
 
           <div className="space-y-4">
             <div className="bg-gradient-to-br from-green-500/20 to-green-500/5 border border-green-500/30 rounded-lg p-4">
-              <div className="text-3xl font-bold text-white mb-1">95</div>
+              <div className="text-3xl font-bold text-white mb-1">{review.severityScore}</div>
               <div className="text-sm text-gray-400">Quality Score</div>
-              <div className="mt-2 text-xs text-green-400">+23 from original</div>
             </div>
 
             <div className="bg-gradient-to-br from-blue-500/20 to-blue-500/5 border border-blue-500/30 rounded-lg p-4">
-              <div className="text-3xl font-bold text-white mb-1">6</div>
-              <div className="text-sm text-gray-400">Issues Fixed</div>
-              <div className="mt-2 text-xs text-blue-400">100% resolution</div>
+              <div className="text-3xl font-bold text-white mb-1">{review.issues.length}</div>
+              <div className="text-sm text-gray-400">Issues Found</div>
             </div>
           </div>
         </div>
@@ -120,15 +146,15 @@ export default function Diff() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold text-white">Original Code</h3>
-              <span className="bg-red-500/20 border border-red-500/30 text-red-400 px-3 py-1 rounded-full text-xs font-medium">
-                Score: 72
+              <span className="bg-blue-500/20 border border-blue-500/30 text-blue-400 px-3 py-1 rounded-full text-xs font-medium">
+                {review.language}
               </span>
             </div>
             <div className="border border-gray-700 rounded-lg overflow-hidden">
               <Editor
                 height="400px"
-                defaultLanguage="typescript"
-                value={originalCode}
+                defaultLanguage={review.language.toLowerCase()}
+                value={review.code || review.originalCode}
                 theme="vs-dark"
                 options={{
                   readOnly: true,
@@ -146,13 +172,13 @@ export default function Diff() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold text-white">Refactored Code</h3>
               <span className="bg-green-500/20 border border-green-500/30 text-green-400 px-3 py-1 rounded-full text-xs font-medium">
-                Score: 95
+                Optimized
               </span>
             </div>
             <div className="border border-green-500/50 rounded-lg overflow-hidden">
               <Editor
                 height="400px"
-                defaultLanguage="typescript"
+                defaultLanguage={review.language.toLowerCase()}
                 value={refactoredCode}
                 theme="vs-dark"
                 options={{
