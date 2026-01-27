@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Review from '../models/Review';
 import { AuthRequest } from '../middleware/auth.middleware';
@@ -50,7 +50,7 @@ export const analyzeCode = async (req: AuthRequest, res: Response) => {
         let analysisResult;
         try {
             analysisResult = JSON.parse(cleanText);
-        } catch (e) {
+        } catch {
             console.error('Failed to parse Gemini response:', text);
             return res.status(500).json({ message: 'Failed to analyze code' });
         }
@@ -66,7 +66,15 @@ export const analyzeCode = async (req: AuthRequest, res: Response) => {
 
         await review.save();
 
-        res.status(201).json(review);
+        const reviewObj = review.toObject();
+        if (reviewObj.issues) {
+            reviewObj.issues = reviewObj.issues.map((issue: Record<string, any>) => ({
+                ...issue,
+                id: issue._id.toString(),
+            }));
+        }
+
+        res.status(201).json(reviewObj);
     } catch (error) {
         console.error('Error analyzing code:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -77,7 +85,19 @@ export const getReviews = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user.uid;
         const reviews = await Review.find({ userId }).sort({ createdAt: -1 });
-        res.json(reviews);
+
+        const transformedReviews = reviews.map(review => {
+            const r = review.toObject();
+            if (r.issues) {
+                r.issues = r.issues.map((issue: Record<string, any>) => ({
+                    ...issue,
+                    id: issue._id.toString(),
+                }));
+            }
+            return r;
+        });
+
+        res.json(transformedReviews);
     } catch (error) {
         console.error('Error fetching reviews:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -94,7 +114,15 @@ export const getReviewById = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: 'Review not found' });
         }
 
-        res.json(review);
+        const r = review.toObject();
+        if (r.issues) {
+            r.issues = r.issues.map((issue: Record<string, any>) => ({
+                ...issue,
+                id: issue._id.toString(),
+            }));
+        }
+
+        res.json(r);
     } catch (error) {
         console.error('Error fetching review:', error);
         res.status(500).json({ message: 'Internal server error' });
